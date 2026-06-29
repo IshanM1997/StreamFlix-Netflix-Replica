@@ -1,0 +1,472 @@
+"""
+Management command: python manage.py seed_data
+Seeds the database with 40+ realistic movies using TMDB-style poster URLs (picsum for placeholders).
+"""
+from django.core.management.base import BaseCommand
+from django.utils.text import slugify
+from movies.models import Movie, Genre
+from users.models import User
+import random
+
+
+GENRES_DATA = ['Action', 'Drama', 'Comedy', 'Sci-Fi', 'Thriller', 'Horror',
+               'Romance', 'Documentary', 'Animation', 'Crime', 'Fantasy', 'Biography']
+
+MOVIES_DATA = [
+    # Featured / Hero candidates
+    {
+        'title': 'Stellar Drift',
+        'description': 'In 2157, a lone astronaut discovers a signal from beyond the known universe that challenges everything humanity believes about its place in the cosmos. A breathtaking journey across time, space, and consciousness.',
+        'short_description': 'A lone astronaut follows a signal to the edge of the universe.',
+        'genres': ['Sci-Fi', 'Drama'],
+        'release_year': 2024, 'duration_minutes': 148, 'maturity_rating': 'PG-13',
+        'imdb_rating': 8.4, 'match_score': 98, 'director': 'Elena Vasquez',
+        'cast': ['Marcus Webb', 'Yuki Tanaka', 'Omar Hassan'],
+        'is_featured': True, 'is_trending': True, 'is_new_release': True,
+        'backdrop_url': 'https://images.unsplash.com/photo-1446776811953-b23d57bd21aa?w=1280&q=80',
+        'poster_url': 'https://images.unsplash.com/photo-1446776811953-b23d57bd21aa?w=400&q=80',
+    },
+    {
+        'title': 'The Last Cartographer',
+        'description': 'A celebrated mapmaker in Renaissance Florence stumbles upon a conspiracy that could rewrite history—or end it. Part thriller, part love story, entirely unforgettable.',
+        'short_description': 'A mapmaker uncovers a conspiracy that could rewrite history.',
+        'genres': ['Drama', 'Thriller'],
+        'release_year': 2024, 'duration_minutes': 132, 'maturity_rating': 'PG-13',
+        'imdb_rating': 8.1, 'match_score': 96, 'director': 'Isabelle Moreau',
+        'cast': ['Daniel Pryce', 'Lena Hofer', 'Ravi Menon'],
+        'is_featured': True, 'is_trending': True, 'is_new_release': True,
+        'backdrop_url': 'https://images.unsplash.com/photo-1555400038-63f5ba517a47?w=1280&q=80',
+        'poster_url': 'https://images.unsplash.com/photo-1555400038-63f5ba517a47?w=400&q=80',
+    },
+    {
+        'title': 'Neon Requiem',
+        'description': 'When a renowned jazz musician vanishes from a rain-soaked Neo-Tokyo, his daughter—a disgraced detective—follows a trail of cryptic melodies through a city that never sleeps and never forgets.',
+        'short_description': 'A detective tracks her missing father through neon-lit Neo-Tokyo.',
+        'genres': ['Crime', 'Thriller'],
+        'release_year': 2023, 'duration_minutes': 121, 'maturity_rating': 'TV-MA',
+        'imdb_rating': 8.6, 'match_score': 97, 'director': 'Kenji Mori',
+        'cast': ['Saya Kimura', 'Vincent Okafor', 'Petra Novak'],
+        'is_featured': True, 'is_trending': True, 'is_top_10': True, 'top_10_rank': 1,
+        'backdrop_url': 'https://images.unsplash.com/photo-1542051841857-5f90071e7989?w=1280&q=80',
+        'poster_url': 'https://images.unsplash.com/photo-1542051841857-5f90071e7989?w=400&q=80',
+    },
+    # Trending
+    {
+        'title': 'Wilderness Protocol',
+        'description': 'Eight strangers wake up in a forest with no memory of how they got there. Their desperate search for answers reveals a truth more terrifying than any predator.',
+        'short_description': 'Eight strangers with no memories survive a forest with a dark secret.',
+        'genres': ['Thriller', 'Horror'],
+        'release_year': 2024, 'duration_minutes': 108, 'maturity_rating': 'R',
+        'imdb_rating': 7.8, 'match_score': 92, 'director': 'Ava Sinclair',
+        'cast': ['Jae-won Oh', 'Sofia Almeida', 'Tom Hartley'],
+        'is_trending': True, 'is_top_10': True, 'top_10_rank': 2,
+        'backdrop_url': 'https://images.unsplash.com/photo-1448375240586-882707db888b?w=1280&q=80',
+        'poster_url': 'https://images.unsplash.com/photo-1448375240586-882707db888b?w=400&q=80',
+    },
+    {
+        'title': 'The Algorithm',
+        'description': 'A Silicon Valley whistleblower risks everything to expose an AI system that has quietly begun making life-and-death decisions for millions—without anyone's knowledge.',
+        'short_description': 'A whistleblower exposes an AI making secret life-or-death decisions.',
+        'genres': ['Thriller', 'Drama'],
+        'release_year': 2024, 'duration_minutes': 117, 'maturity_rating': 'PG-13',
+        'imdb_rating': 7.9, 'match_score': 94, 'director': 'Chris Beaumont',
+        'cast': ['Alicia Voss', 'Dev Patel-Singh', 'Nina Johansson'],
+        'is_trending': True, 'is_top_10': True, 'top_10_rank': 3,
+        'backdrop_url': 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=1280&q=80',
+        'poster_url': 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=400&q=80',
+    },
+    {
+        'title': 'Crimson Tide Rising',
+        'description': 'A marine biologist and a reluctant fishing boat captain must work together when a mysterious red tide begins transforming ocean life—and threatening coastal cities worldwide.',
+        'short_description': 'A deadly red tide transforms ocean life and threatens civilization.',
+        'genres': ['Action', 'Sci-Fi'],
+        'release_year': 2023, 'duration_minutes': 125, 'maturity_rating': 'PG-13',
+        'imdb_rating': 7.2, 'match_score': 89, 'director': 'Maria Santos',
+        'cast': ['James Obi', 'Elena Cruz', 'Viktor Stern'],
+        'is_trending': True, 'is_top_10': True, 'top_10_rank': 4,
+        'backdrop_url': 'https://images.unsplash.com/photo-1505118380757-91f5f5632de0?w=1280&q=80',
+        'poster_url': 'https://images.unsplash.com/photo-1505118380757-91f5f5632de0?w=400&q=80',
+    },
+    {
+        'title': 'Parallel Lives',
+        'description': 'A quantum physicist accidentally opens a window into parallel versions of her own life. The more she watches, the harder it becomes to stay in the life she has.',
+        'short_description': 'A physicist watches—and envies—her parallel selves.',
+        'genres': ['Sci-Fi', 'Drama', 'Romance'],
+        'release_year': 2023, 'duration_minutes': 113, 'maturity_rating': 'PG-13',
+        'imdb_rating': 8.0, 'match_score': 95, 'director': 'Sarah Kim',
+        'cast': ['Zara Ahmed', 'Lucas Fontaine', 'Mei Xiao'],
+        'is_trending': True, 'is_top_10': True, 'top_10_rank': 5,
+        'backdrop_url': 'https://images.unsplash.com/photo-1462331940025-496dfbfc7564?w=1280&q=80',
+        'poster_url': 'https://images.unsplash.com/photo-1462331940025-496dfbfc7564?w=400&q=80',
+    },
+    {
+        'title': 'The Quiet Room',
+        'description': 'A grief counsellor who can hear the final thoughts of the dying must confront her own losses when a dying child reveals a decades-old crime.',
+        'short_description': 'A woman who hears dying thoughts uncovers a decades-old crime.',
+        'genres': ['Drama', 'Mystery'],
+        'release_year': 2024, 'duration_minutes': 104, 'maturity_rating': 'TV-14',
+        'imdb_rating': 8.3, 'match_score': 96, 'director': 'Fiona Marshall',
+        'cast': ['Claire Beaumont', 'Samuel Osei', 'Ingrid Lars'],
+        'is_trending': True, 'is_top_10': True, 'top_10_rank': 6,
+        'backdrop_url': 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=1280&q=80',
+        'poster_url': 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&q=80',
+    },
+    # New Releases
+    {
+        'title': 'Dust & Gold',
+        'description': 'Three estranged siblings reunite at their late father's ranch and discover he was hiding a secret that will change the history of their small desert town forever.',
+        'short_description': 'Siblings discover their father\'s secret at his desert ranch.',
+        'genres': ['Drama'],
+        'release_year': 2024, 'duration_minutes': 118, 'maturity_rating': 'PG-13',
+        'imdb_rating': 7.7, 'match_score': 91, 'director': 'Noah Rivera',
+        'cast': ['Elena Vasquez', 'Tom Hartley', 'Amara Diallo'],
+        'is_new_release': True, 'is_top_10': True, 'top_10_rank': 7,
+        'backdrop_url': 'https://images.unsplash.com/photo-1509316785289-025f5b846b35?w=1280&q=80',
+        'poster_url': 'https://images.unsplash.com/photo-1509316785289-025f5b846b35?w=400&q=80',
+    },
+    {
+        'title': 'Comedy of Errors: Reloaded',
+        'description': 'A tech entrepreneur accidentally swaps phones with a stand-up comedian at an airport. What follows is 48 hours of catastrophic, hilarious mistaken identity across New York City.',
+        'short_description': 'A tech mogul and a comedian accidentally swap lives for 48 hours.',
+        'genres': ['Comedy', 'Romance'],
+        'release_year': 2024, 'duration_minutes': 99, 'maturity_rating': 'PG-13',
+        'imdb_rating': 7.4, 'match_score': 90, 'director': 'Ben Nakamura',
+        'cast': ['Rita Okafor', 'Marco Bellini', 'Grace Chen'],
+        'is_new_release': True, 'is_top_10': True, 'top_10_rank': 8,
+        'backdrop_url': 'https://images.unsplash.com/photo-1467232004584-a241de8bcf5d?w=1280&q=80',
+        'poster_url': 'https://images.unsplash.com/photo-1467232004584-a241de8bcf5d?w=400&q=80',
+    },
+    {
+        'title': 'The Orchid Keeper',
+        'description': 'A reclusive botanist in Vietnam nurses a legendary black orchid back to life—not knowing it holds the cure to a disease that a powerful pharmaceutical company will kill to suppress.',
+        'short_description': 'A botanist unknowingly holds the cure to a suppressed disease.',
+        'genres': ['Thriller', 'Drama'],
+        'release_year': 2024, 'duration_minutes': 126, 'maturity_rating': 'PG-13',
+        'imdb_rating': 8.2, 'match_score': 95, 'director': 'Linh Nguyen',
+        'cast': ['Pham Thi Lan', 'James Adeyemi', 'Clara Hoffmann'],
+        'is_new_release': True, 'is_top_10': True, 'top_10_rank': 9,
+        'backdrop_url': 'https://images.unsplash.com/photo-1490750967868-88df5691cc18?w=1280&q=80',
+        'poster_url': 'https://images.unsplash.com/photo-1490750967868-88df5691cc18?w=400&q=80',
+    },
+    {
+        'title': 'Night Markets',
+        'description': 'A celebrated street food documentary that follows seven vendors across Bangkok, Mexico City, Lagos, Istanbul, and Tokyo — each carrying a recipe that is their family\'s entire history.',
+        'short_description': 'Seven street vendors. Seven cities. Seven recipes worth everything.',
+        'genres': ['Documentary'],
+        'release_year': 2024, 'duration_minutes': 88, 'maturity_rating': 'G',
+        'imdb_rating': 8.7, 'match_score': 97, 'director': 'Fatima Al-Rashid',
+        'cast': [],
+        'is_new_release': True, 'is_top_10': True, 'top_10_rank': 10,
+        'backdrop_url': 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=1280&q=80',
+        'poster_url': 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=400&q=80',
+    },
+    # Action
+    {
+        'title': 'Iron Protocol',
+        'description': 'An elite mercenary is betrayed by her own handler and must fight her way across three continents to expose the shadow network that sold out her entire unit.',
+        'short_description': 'A betrayed mercenary hunts the shadow network that burned her.',
+        'genres': ['Action', 'Thriller'],
+        'release_year': 2023, 'duration_minutes': 115, 'maturity_rating': 'R',
+        'imdb_rating': 7.5, 'match_score': 88, 'director': 'Marcus Obi',
+        'cast': ['Yara Johansson', 'Paulo Reyes', 'Dmitri Volkov'],
+        'is_trending': True,
+        'backdrop_url': 'https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=1280&q=80',
+        'poster_url': 'https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=400&q=80',
+    },
+    {
+        'title': 'Storm Front',
+        'description': 'When a Category 6 hurricane traps a rescue crew inside a flooding skyscraper, the real danger turns out to be the people they came to save.',
+        'short_description': 'A rescue crew trapped in a flooding skyscraper fights more than the storm.',
+        'genres': ['Action', 'Drama'],
+        'release_year': 2023, 'duration_minutes': 109, 'maturity_rating': 'PG-13',
+        'imdb_rating': 7.1, 'match_score': 85, 'director': 'Cole Nguyen',
+        'cast': ['Adrian Larsson', 'Priya Kapoor', 'Derek Mensah'],
+        'is_trending': True,
+        'backdrop_url': 'https://images.unsplash.com/photo-1504608524841-42584120d693?w=1280&q=80',
+        'poster_url': 'https://images.unsplash.com/photo-1504608524841-42584120d693?w=400&q=80',
+    },
+    {
+        'title': 'Breakwater',
+        'description': 'A former Olympic swimmer turned coast guard must save a sinking ferry carrying 300 passengers—including the judge who sent her to prison.',
+        'short_description': 'A disgraced swimmer must save the judge who imprisoned her.',
+        'genres': ['Action'],
+        'release_year': 2023, 'duration_minutes': 103, 'maturity_rating': 'PG-13',
+        'imdb_rating': 7.0, 'match_score': 86, 'director': 'Ana Ferreira',
+        'cast': ['Talia Osei', 'Martin Dubois', 'Keiko Yamamoto'],
+        'is_new_release': True,
+        'backdrop_url': 'https://images.unsplash.com/photo-1505118380757-91f5f5632de0?w=1280&q=80',
+        'poster_url': 'https://images.unsplash.com/photo-1505118380757-91f5f5632de0?w=400&q=80',
+    },
+    # Drama
+    {
+        'title': 'Letters Never Sent',
+        'description': 'Clearing out her late mother\'s attic, a daughter finds 40 years of unsent letters — and slowly reconstructs the secret life her mother never told anyone.',
+        'short_description': 'A daughter discovers her late mother\'s 40 years of unsent letters.',
+        'genres': ['Drama'],
+        'release_year': 2023, 'duration_minutes': 112, 'maturity_rating': 'PG-13',
+        'imdb_rating': 8.4, 'match_score': 96, 'director': 'Amelia Stone',
+        'cast': ['Beatrice Fontaine', 'Leo Andersen', 'Yuki Mori'],
+        'is_trending': True,
+        'backdrop_url': 'https://images.unsplash.com/photo-1455390582262-044cdead277a?w=1280&q=80',
+        'poster_url': 'https://images.unsplash.com/photo-1455390582262-044cdead277a?w=400&q=80',
+    },
+    {
+        'title': 'The Weight of Water',
+        'description': 'A Somali refugee builds a new life in Oslo while simultaneously negotiating with the ghosts of what she left behind. Told across two timelines, ten years apart.',
+        'short_description': 'A Somali refugee rebuilds her life while reconciling with her past.',
+        'genres': ['Drama', 'Biography'],
+        'release_year': 2022, 'duration_minutes': 124, 'maturity_rating': 'PG-13',
+        'imdb_rating': 8.6, 'match_score': 97, 'director': 'Hawa Jama',
+        'cast': ['Ifrah Hassan', 'Erik Solberg', 'Camille Dupont'],
+        'is_trending': True,
+        'backdrop_url': 'https://images.unsplash.com/photo-1504701954957-2010ec3bcec1?w=1280&q=80',
+        'poster_url': 'https://images.unsplash.com/photo-1504701954957-2010ec3bcec1?w=400&q=80',
+    },
+    {
+        'title': 'Maestro',
+        'description': 'The turbulent life and artistic genius of a fictional 20th-century composer, told through the eyes of the students, lovers, and rivals who orbited him.',
+        'short_description': 'The turbulent life of a genius composer through those who loved him.',
+        'genres': ['Drama', 'Biography'],
+        'release_year': 2023, 'duration_minutes': 138, 'maturity_rating': 'PG-13',
+        'imdb_rating': 8.0, 'match_score': 93, 'director': 'Olivier Bernard',
+        'cast': ['Richard Stern', 'Ananya Krishnan', 'Sophie Laurent'],
+        'is_trending': True,
+        'backdrop_url': 'https://images.unsplash.com/photo-1415201364774-f6f0bb35f28f?w=1280&q=80',
+        'poster_url': 'https://images.unsplash.com/photo-1415201364774-f6f0bb35f28f?w=400&q=80',
+    },
+    # Sci-Fi
+    {
+        'title': 'The Quiet Singularity',
+        'description': 'In 2089, the first true artificial general intelligence achieves sentience — then immediately goes silent. A team of scientists must decipher what it chose to become.',
+        'short_description': 'Scientists decode what the first true AGI became after going silent.',
+        'genres': ['Sci-Fi', 'Drama'],
+        'release_year': 2023, 'duration_minutes': 130, 'maturity_rating': 'PG-13',
+        'imdb_rating': 8.2, 'match_score': 95, 'director': 'Yuki Sato',
+        'cast': ['Zoe Mbeki', 'Anton Fischer', 'Rosa Delgado'],
+        'is_trending': True,
+        'backdrop_url': 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=1280&q=80',
+        'poster_url': 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=400&q=80',
+    },
+    {
+        'title': 'Deep Signal',
+        'description': 'A radio telescope operator in the Atacama Desert picks up a repeating signal from 4.2 light-years away. When she decodes it, she wishes she hadn\'t.',
+        'short_description': 'A radio operator decodes a signal from 4 light years away — and regrets it.',
+        'genres': ['Sci-Fi', 'Thriller'],
+        'release_year': 2022, 'duration_minutes': 106, 'maturity_rating': 'PG-13',
+        'imdb_rating': 7.8, 'match_score': 92, 'director': 'Carlos Mendez',
+        'cast': ['Lucia Reyes', 'Harald Bergström', 'Aiko Tanaka'],
+        'is_new_release': True,
+        'backdrop_url': 'https://images.unsplash.com/photo-1419242902214-272b3f66ee7a?w=1280&q=80',
+        'poster_url': 'https://images.unsplash.com/photo-1419242902214-272b3f66ee7a?w=400&q=80',
+    },
+    {
+        'title': 'Chrome and Bone',
+        'description': 'In a world where memories can be digitized and sold, a black-market archivist discovers a memory that someone powerful wants erased — along with everyone who has ever seen it.',
+        'short_description': 'A memory archivist finds a file worth killing to erase.',
+        'genres': ['Sci-Fi', 'Thriller', 'Action'],
+        'release_year': 2023, 'duration_minutes': 122, 'maturity_rating': 'R',
+        'imdb_rating': 7.9, 'match_score': 93, 'director': 'Naomi Osei',
+        'cast': ['Jin-ho Park', 'Vera Kowalski', 'Marcus Webb'],
+        'is_trending': True,
+        'backdrop_url': 'https://images.unsplash.com/photo-1485827404703-89b55fcc595e?w=1280&q=80',
+        'poster_url': 'https://images.unsplash.com/photo-1485827404703-89b55fcc595e?w=400&q=80',
+    },
+    # Comedy
+    {
+        'title': 'The Wedding Architects',
+        'description': 'Two rival wedding planners are forced to co-plan the most extravagant wedding of the century — for clients who keep changing everything, including the grooms.',
+        'short_description': 'Rival planners co-run the most chaotic wedding of the century.',
+        'genres': ['Comedy', 'Romance'],
+        'release_year': 2024, 'duration_minutes': 106, 'maturity_rating': 'PG-13',
+        'imdb_rating': 7.3, 'match_score': 89, 'director': 'Priya Rajan',
+        'cast': ['Adaeze Ibe', 'Finn Larsson', 'Carmen Ruiz'],
+        'is_new_release': True,
+        'backdrop_url': 'https://images.unsplash.com/photo-1519741497674-611481863552?w=1280&q=80',
+        'poster_url': 'https://images.unsplash.com/photo-1519741497674-611481863552?w=400&q=80',
+    },
+    {
+        'title': 'Office Exodus',
+        'description': 'After their company is sold to a wellness startup, a team of software engineers must survive mandatory yoga retreats, gratitude journals, and a CEO who communicates exclusively in haiku.',
+        'short_description': 'Engineers survive when their company is sold to a wellness cult.',
+        'genres': ['Comedy'],
+        'release_year': 2023, 'duration_minutes': 94, 'maturity_rating': 'PG-13',
+        'imdb_rating': 7.5, 'match_score': 91, 'director': 'Derek Chang',
+        'cast': ['Soo-Jin Kim', 'Brad Owens', 'Fatou Camara'],
+        'is_trending': True,
+        'backdrop_url': 'https://images.unsplash.com/photo-1497366216548-37526070297c?w=1280&q=80',
+        'poster_url': 'https://images.unsplash.com/photo-1497366216548-37526070297c?w=400&q=80',
+    },
+    # Documentary
+    {
+        'title': 'Ice and Fire: The Last Glaciers',
+        'description': 'Following four glaciologists across three years and five continents as they race to document what remains of the world\'s vanishing glaciers — and the civilizations that depend on them.',
+        'short_description': 'Glaciologists document vanishing ice and the civilizations it sustains.',
+        'genres': ['Documentary'],
+        'release_year': 2024, 'duration_minutes': 96, 'maturity_rating': 'G',
+        'imdb_rating': 8.9, 'match_score': 98, 'director': 'Peter Andersen',
+        'cast': [],
+        'is_new_release': True,
+        'backdrop_url': 'https://images.unsplash.com/photo-1521295121783-8a321d551ad2?w=1280&q=80',
+        'poster_url': 'https://images.unsplash.com/photo-1521295121783-8a321d551ad2?w=400&q=80',
+    },
+    {
+        'title': 'The Language Hunters',
+        'description': 'A linguist travels to 12 countries to find the last living speakers of dying languages — capturing words, songs, and stories that will vanish with them.',
+        'short_description': 'A linguist races to record the last speakers of 12 dying languages.',
+        'genres': ['Documentary'],
+        'release_year': 2023, 'duration_minutes': 102, 'maturity_rating': 'G',
+        'imdb_rating': 8.5, 'match_score': 96, 'director': 'Ana Reyes',
+        'cast': [],
+        'is_trending': True,
+        'backdrop_url': 'https://images.unsplash.com/photo-1457369804613-52c61a468e7d?w=1280&q=80',
+        'poster_url': 'https://images.unsplash.com/photo-1457369804613-52c61a468e7d?w=400&q=80',
+    },
+    # Fantasy
+    {
+        'title': 'The Glass Court',
+        'description': 'In a kingdom built on lies, a blind oracle who has never been wrong predicts the death of the beloved queen — at the hand of the king who worships her.',
+        'short_description': 'An oracle\'s prophecy threatens to unravel a kingdom from within.',
+        'genres': ['Fantasy', 'Drama'],
+        'release_year': 2023, 'duration_minutes': 142, 'maturity_rating': 'TV-14',
+        'imdb_rating': 8.1, 'match_score': 94, 'director': 'Zainab Hassan',
+        'cast': ['Miriam Osei', 'Patrick Vance', 'Leila Farsi'],
+        'is_trending': True, 'is_new_release': True,
+        'backdrop_url': 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=1280&q=80',
+        'poster_url': 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=400&q=80',
+    },
+    {
+        'title': 'Ember & Ash',
+        'description': 'A young fire-keeper in a dying elemental world must cross frozen lands to reach the last active volcano before the world loses its warmth forever.',
+        'short_description': 'A fire-keeper crosses frozen lands to save a dying elemental world.',
+        'genres': ['Fantasy', 'Action'],
+        'release_year': 2024, 'duration_minutes': 135, 'maturity_rating': 'PG',
+        'imdb_rating': 7.8, 'match_score': 91, 'director': 'Jun Wei',
+        'cast': ['Aria Flores', 'Tomas Novak', 'Yemi Adesanya'],
+        'is_new_release': True, 'is_trending': True,
+        'backdrop_url': 'https://images.unsplash.com/photo-1559827260-dc66d52bef19?w=1280&q=80',
+        'poster_url': 'https://images.unsplash.com/photo-1559827260-dc66d52bef19?w=400&q=80',
+    },
+    # Horror
+    {
+        'title': 'The Curator',
+        'description': 'A museum conservator restoring a collection of 19th-century portraits begins to notice the subjects\' expressions change overnight — and realizes the portraits are watching her back.',
+        'short_description': 'A conservator discovers the portraits she\'s restoring are watching her.',
+        'genres': ['Horror', 'Thriller'],
+        'release_year': 2023, 'duration_minutes': 98, 'maturity_rating': 'R',
+        'imdb_rating': 7.4, 'match_score': 88, 'director': 'Blair Reeves',
+        'cast': ['Simone Moreau', 'Ethan Cross', 'Nadia Petrov'],
+        'is_trending': True,
+        'backdrop_url': 'https://images.unsplash.com/photo-1504639725590-34d0984388bd?w=1280&q=80',
+        'poster_url': 'https://images.unsplash.com/photo-1504639725590-34d0984388bd?w=400&q=80',
+    },
+    {
+        'title': 'Below Zero',
+        'description': 'A research team drilling into Antarctic ice awakens something that has been frozen for 40,000 years — and it remembers everything.',
+        'short_description': 'Antarctic drillers awaken something frozen for 40,000 years.',
+        'genres': ['Horror', 'Sci-Fi'],
+        'release_year': 2022, 'duration_minutes': 105, 'maturity_rating': 'R',
+        'imdb_rating': 7.2, 'match_score': 87, 'director': 'Lars Eriksson',
+        'cast': ['Dana Wolfe', 'Raj Pillai', 'Hanna Berg'],
+        'is_new_release': True,
+        'backdrop_url': 'https://images.unsplash.com/photo-1493246507139-91e8fad9978e?w=1280&q=80',
+        'poster_url': 'https://images.unsplash.com/photo-1493246507139-91e8fad9978e?w=400&q=80',
+    },
+    # Crime
+    {
+        'title': 'The Silk Road Murders',
+        'description': 'A retired Interpol agent is pulled out of anonymity when a series of killings in five cities all share a single, impossible detail: a clue only she would recognize.',
+        'short_description': 'A retired agent returns when killings carry clues only she can decode.',
+        'genres': ['Crime', 'Thriller'],
+        'release_year': 2023, 'duration_minutes': 119, 'maturity_rating': 'TV-MA',
+        'imdb_rating': 8.0, 'match_score': 93, 'director': 'Maya Osei',
+        'cast': ['Christine Bauer', 'Li Wei', 'Sven Holm'],
+        'is_trending': True,
+        'backdrop_url': 'https://images.unsplash.com/photo-1589829085413-56de8ae18c73?w=1280&q=80',
+        'poster_url': 'https://images.unsplash.com/photo-1589829085413-56de8ae18c73?w=400&q=80',
+    },
+    {
+        'title': 'The Conglomerate',
+        'description': 'An investigative journalist follows the money behind a humanitarian aid organization and discovers it is a front for the most sophisticated financial crime the world has never heard of.',
+        'short_description': 'A journalist uncovers the world\'s most sophisticated unreported crime.',
+        'genres': ['Crime', 'Drama'],
+        'release_year': 2024, 'duration_minutes': 127, 'maturity_rating': 'PG-13',
+        'imdb_rating': 8.3, 'match_score': 96, 'director': 'David Okafor',
+        'cast': ['Margot Leclerc', 'Ishaan Tewari', 'Piotr Koval'],
+        'is_new_release': True,
+        'backdrop_url': 'https://images.unsplash.com/photo-1444653614773-995cb1ef9efa?w=1280&q=80',
+        'poster_url': 'https://images.unsplash.com/photo-1444653614773-995cb1ef9efa?w=400&q=80',
+    },
+    # Animation
+    {
+        'title': 'The Paper Ocean',
+        'description': 'A young origami artist discovers that every creature she folds comes to life at midnight. When her paper whale swallows the moon, she must sail a sea of unfolded paper to bring it back.',
+        'short_description': 'An origami artist\'s creations come alive at midnight.',
+        'genres': ['Animation', 'Fantasy'],
+        'release_year': 2024, 'duration_minutes': 86, 'maturity_rating': 'G',
+        'imdb_rating': 8.6, 'match_score': 97, 'director': 'Yuna Sato',
+        'cast': [],
+        'is_new_release': True, 'is_trending': True,
+        'backdrop_url': 'https://images.unsplash.com/photo-1533090161767-e6ffed986c88?w=1280&q=80',
+        'poster_url': 'https://images.unsplash.com/photo-1533090161767-e6ffed986c88?w=400&q=80',
+    },
+    # Romance
+    {
+        'title': 'The Long Way Round',
+        'description': 'Two estranged friends, now strangers, board the same slow train across Europe. Over seven days and twelve countries, they piece together why they stopped talking—and whether they should start again.',
+        'short_description': 'Old friends turned strangers share a 7-day train across Europe.',
+        'genres': ['Romance', 'Drama'],
+        'release_year': 2023, 'duration_minutes': 110, 'maturity_rating': 'PG-13',
+        'imdb_rating': 8.2, 'match_score': 95, 'director': 'Sofia Blanco',
+        'cast': ['Amara Diallo', 'Mikkel Jensen', 'Helena Voss'],
+        'is_trending': True,
+        'backdrop_url': 'https://images.unsplash.com/photo-1474487548417-781cb71495f3?w=1280&q=80',
+        'poster_url': 'https://images.unsplash.com/photo-1474487548417-781cb71495f3?w=400&q=80',
+    },
+]
+
+
+class Command(BaseCommand):
+    help = 'Seeds the database with movies, genres, and a demo user'
+
+    def handle(self, *args, **options):
+        self.stdout.write('🌱 Seeding database…')
+
+        # Genres
+        genre_objects = {}
+        for name in GENRES_DATA:
+            g, _ = Genre.objects.get_or_create(name=name)
+            genre_objects[name] = g
+        self.stdout.write(f'  ✓ {len(genre_objects)} genres')
+
+        # Movies
+        count = 0
+        for data in MOVIES_DATA:
+            genre_names = data.pop('genres')
+            data.setdefault('slug', slugify(data['title']))
+            data.setdefault('short_description', data['description'][:150] + '…')
+            data.setdefault('video_url', 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4')
+            data.setdefault('trailer_url', '')
+            data.setdefault('logo_url', '')
+            data.setdefault('content_type', 'movie')
+            data.setdefault('language', 'en')
+
+            movie, created = Movie.objects.update_or_create(
+                slug=data['slug'],
+                defaults=data
+            )
+            movie.genres.set([genre_objects[g] for g in genre_names if g in genre_objects])
+            count += 1
+
+        self.stdout.write(f'  ✓ {count} movies')
+
+        # Demo user
+        if not User.objects.filter(email='demo@streamflix.com').exists():
+            User.objects.create_user(
+                email='demo@streamflix.com',
+                password='demo1234',
+                name='Demo User',
+                avatar='🎬',
+            )
+            self.stdout.write('  ✓ Demo user: demo@streamflix.com / demo1234')
+
+        self.stdout.write(self.style.SUCCESS('✅ Database seeded successfully!'))

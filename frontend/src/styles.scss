@@ -1,0 +1,66 @@
+@use '@angular/material' as mat;
+
+// ── Material dark theme ──────────────────────────────────────────────────────
+$streamflix-primary: mat.define-palette(mat.$red-palette, 700, 400, 900);
+$streamflix-accent:  mat.define-palette(mat.$grey-palette, 200, 100, 400);
+
+$streamflix-theme: mat.define-dark-theme((
+  color: (primary: $streamflix-primary, accent: $streamflix-accent),
+  typography: mat.define-typography-config($font-family: 'Netflix Sans, Helvetica Neue, Helvetica, Arial, sans-serif'),
+  density: 0,
+));
+
+@include mat.all-component-themes($streamflix-theme);
+
+// ── Global reset / base ──────────────────────────────────────────────────────
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body {
+  margin: 0; padding: 0; height: 100%;
+  font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  background: #141414;
+  color: #fff;
+  -webkit-font-smoothing: antialiased;
+}
+
+a { color: inherit; }
+
+// ── Scrollbar ────────────────────────────────────────────────────────────────
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: #141414; }
+::-webkit-scrollbar-thumb { background: #444; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #666; }
+
+// ── Dialog overrides ─────────────────────────────────────────────────────────
+.sf-dialog {
+  .mat-mdc-dialog-container {
+    background: #141414 !important;
+    border-radius: 8px !important;
+    padding: 0 !important;
+    overflow: hidden;
+  }
+  .mdc-dialog__surface {
+    background: #141414 !important;
+    border-radius: 8px !important;
+  }
+}
+
+// ── Mat menu overrides ───────────────────────────────────────────────────────
+.sf-menu {
+  .mat-mdc-menu-panel {
+    background: #1a1a1a !important;
+    border: 1px solid rgba(255,255,255,0.12) !important;
+    border-radius: 6px !important;
+    min-width: 220px !important;
+  }
+  .mat-mdc-menu-item { color: #fff !important; }
+  .mat-mdc-menu-item:hover { background: rgba(255,255,255,0.06) !important; }
+  .mat-mdc-menu-item mat-icon { color: rgba(255,255,255,0.6) !important; }
+  .mat-divider { border-color: rgba(255,255,255,0.1) !important; }
+}
+
+// ── Mat spinner red ──────────────────────────────────────────────────────────
+.mat-mdc-progress-spinner.mat-warn circle { stroke: #e50914 !important; }
+
+// ── Snackbar ─────────────────────────────────────────────────────────────────
+.mdc-snackbar__surface { background: #1a1a1a !important; color: #fff !important; }
